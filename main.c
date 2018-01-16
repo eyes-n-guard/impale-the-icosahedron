@@ -90,11 +90,11 @@ bool intersection(vec2 a1, vec2 a2, vec2 b1, vec2 b2, vec2 *result);
 
 void loadConstants(int *w, int *h, float *sens, char *map, float *frustumW, float *frustumN, int *edges, char* fileName);
 void quicksort(int list[], float ref[], int l, int r);
-void drawFilledFaces(face *faces, int nFaces, camera player, vec3 *points, SDL_Renderer *render, colour *colours);
+void drawFilledFaces(face *faces, int nFaces, camera player, vec3 *points, SDL_Renderer *renderer, colour *colours, SDL_Surface **textures);
 void drawLine(vec3 p1, vec3 p2, SDL_Renderer *render);
 void drawWireframeFace(face f, camera player, vec3 *points, SDL_Renderer *render);
 void loadMap(int *nVectors, int *nFaces, int *nColours, vec3 **vectors, face **faces, colour **colours, char *fileName, camera *player, SDL_Surface ***textures, int *nTextures);
-void transformFace(face f, vec3 *points, camera player, SDL_Renderer *renderer);
+void transformFace(face f, vec3 *points, camera player, SDL_Renderer *renderer, SDL_Surface **textures);
 void drawWireframePolygon(vec2 *polygon, int nPoints, SDL_Renderer *renderer);
 void fillTriangle(vec2 p1, vec2 p2, vec2 p3, SDL_Renderer *renderer);
 void swapVec2Ptr(vec2 **p1, vec2 **p2);
@@ -102,6 +102,7 @@ int getClipCode(vec2 a);
 void drawClippedLine(vec2 a, vec2 b, SDL_Renderer *renderer);
 bool clipVelocity(camera *player, face triangle, vec3 *points);
 void buildClipVectors(int nVectors, int nFaces, vec3 *mapVectors, face *mapFaces, vec3 *clipVectors);
+void textureTriangle(vec2 p1, vec2 p2, vec2 p3, SDL_Renderer *renderer, float mA, float mB, float mC, float mD, vec2 origin, int furthest, SDL_Surface *texture, face f, float uz, float vz, float oz);
 
 int main(int argc, char **argv)
 {
@@ -114,7 +115,7 @@ int main(int argc, char **argv)
     loadConstants(&WIDTH, &HEIGHT, &SENSITIVITY, MAP_FILE, &FRUSTUM_WIDTH, &FRUSTUM_NEAR_LENGTH, &DRAW_EDGES, SETTINGS_FILE);
 
     window = SDL_CreateWindow("Dank meme", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, WIDTH, HEIGHT, SDL_WINDOW_SHOWN);
-    renderer = SDL_CreateRenderer(window,-1, SDL_RENDERER_SOFTWARE);
+    renderer = SDL_CreateRenderer(window,1, SDL_RENDERER_ACCELERATED);
 
     SDL_CaptureMouse(true);
     SDL_SetRelativeMouseMode(true);
@@ -323,7 +324,7 @@ int main(int argc, char **argv)
                     if(clipVelocity(&player, mapFaces[i], mapVectors))
                     {
                         velNotClipped = true;
-                        clippedFaces[i] = false;
+                        //clippedFaces[i] = false;
                         player.pos = clipPosHold;
                         break;
                     }
@@ -343,10 +344,10 @@ int main(int argc, char **argv)
 
         //printf("x: %0.2f y: %0.2f z: %0.2f  speed: %0.2f\n", player.pos.x, player.pos.y, player.pos.z, length(player.vel));
 
-        //SDL_SetRenderDrawColor(renderer, 128,128,128, SDL_ALPHA_OPAQUE);
-        //SDL_RenderClear(renderer);
+        SDL_SetRenderDrawColor(renderer, 0,0,0, SDL_ALPHA_OPAQUE);
+        SDL_RenderClear(renderer);
 
-        drawFilledFaces(mapFaces, mapFacesNum, player, mapVectors, renderer, mapColours);
+        drawFilledFaces(mapFaces, mapFacesNum, player, mapVectors, renderer, mapColours, mapTextures);
         //drawFilledFaces(mapFaces, mapFacesNum, player, mapClipVectors, renderer, mapColours);
 
         //draw crosshair
@@ -357,15 +358,14 @@ int main(int argc, char **argv)
 
         if((arrows & 1) == 1)
         {
-            SDL_Rect rekt = {0,0,800,600};
-            SDL_BlitSurface(mapTextures[0],NULL,SDL_GetWindowSurface(window),&rekt);
+            SDL_Rect rekt = {0,0,1920,1080};
+            SDL_BlitScaled(mapTextures[0],NULL,SDL_GetWindowSurface(window),&rekt);
         }
 
 
         SDL_RenderPresent(renderer);
 
         SDL_Delay(max(0,16 - SDL_GetTicks() + lastTime)); //make sure the time interval is always the same
-        //SDL_Delay(500);
         //printf("FPS: %d\n", (int)(1000.0f/(float)(SDL_GetTicks() - lastTime))); //print fps
     }
 
@@ -614,9 +614,9 @@ void buildClipVectors(int nVectors, int nFaces, vec3 *mapVectors, face *mapFaces
 
             float det = dot(norm1, cross(norm2, norm3));
 
-            printf("%d %f %d %d %0.4f %0.4f %0.4f\n", i, det, nLinkedFaces, nFinalFaces, length(norm1), length(norm2), length(norm3));
+            //printf("%d %f %d %d %0.4f %0.4f %0.4f\n", i, det, nLinkedFaces, nFinalFaces, length(norm1), length(norm2), length(norm3));
 
-            if(i == 14 && i == 15)
+            if(i == 14 && i == 15 && false)
             {
                 printf("%0.3f %0.3f %0.3f   ", norm1.x, norm1.y, norm1.z);
                 printf("%0.3f %0.3f %0.3f   ", norm2.x, norm2.y, norm2.z);
@@ -650,7 +650,7 @@ void loadConstants(int *w, int *h, float *sens, char *map, float *frustumW, floa
     fclose(settingsFile);
 }
 
-void drawFilledFaces(face *faces, int nFaces, camera player, vec3 *points, SDL_Renderer *renderer, colour *colours)
+void drawFilledFaces(face *faces, int nFaces, camera player, vec3 *points, SDL_Renderer *renderer, colour *colours, SDL_Surface **textures)
 {
     int facesIndex[nFaces]; //index of each visible face
     int i, nVisible = 0;
@@ -674,11 +674,12 @@ void drawFilledFaces(face *faces, int nFaces, camera player, vec3 *points, SDL_R
 
         quicksort(facesIndex, dist, 0, nVisible-1);
 
-        //fill in order from furthest to closest (painter's algorithm) or front to back with some spicy clipping (reverse painter's algorithm)
+        //fill in order from furthest to closest (painter's algorithm)
         for(i=nVisible-1;i >= 0;i--)
         {
-            SDL_SetRenderDrawColor(renderer, colours[faces[facesIndex[i]].texture].r, colours[faces[facesIndex[i]].texture].g, colours[faces[facesIndex[i]].texture].b, SDL_ALPHA_OPAQUE);
-            transformFace(faces[facesIndex[i]], points, player, renderer);
+            if((faces[facesIndex[i]].flags & 1) == 0)
+                SDL_SetRenderDrawColor(renderer, colours[faces[facesIndex[i]].texture].r, colours[faces[facesIndex[i]].texture].g, colours[faces[facesIndex[i]].texture].b, SDL_ALPHA_OPAQUE);
+            transformFace(faces[facesIndex[i]], points, player, renderer, textures);
         }
 
     }
@@ -713,7 +714,7 @@ void quicksort(int list[], float ref[], int l, int r)
 
 }
 
-void transformFace(face f, vec3 *points, camera player, SDL_Renderer *renderer) //also fills face
+void transformFace(face f, vec3 *points, camera player, SDL_Renderer *renderer, SDL_Surface **textures) //also fills face
 {
     vec3 pointsR[3] = {rotateX(rotateZ(sub(points[f.p1], player.pos), -player.yaw), -player.pitch), //rotate and translate points relative to player
     rotateX(rotateZ(sub(points[f.p2], player.pos), -player.yaw), -player.pitch),
@@ -752,15 +753,43 @@ void transformFace(face f, vec3 *points, camera player, SDL_Renderer *renderer) 
 
     if(visible == 0)
     {
-        fillTriangle(pointsOut[0], pointsOut[1], pointsOut[2], renderer);
-        if(nPoints == 4)
+        if((f.flags & 1))
         {
-            fillTriangle(pointsOut[0], pointsOut[2], pointsOut[3], renderer);
-            if(DRAW_EDGES == 2)
-                SDL_SetRenderDrawColor(renderer, 50,50,50,SDL_ALPHA_OPAQUE);
-            drawClippedLine(pointsOut[0], pointsOut[2], renderer);
-            //SDL_RenderDrawLine(renderer, pointsOut[0].x + (float)WIDTH/2, pointsOut[0].y + (float)HEIGHT/2, pointsOut[2].x + (float)WIDTH/2, pointsOut[2].y + (float)HEIGHT/2);
+            printf("wew");
+            int furthest = 0;
+            if(pointsR[furthest].y < pointsR[1].y)
+                furthest = 1;
+            if(pointsR[furthest].y < pointsR[2].y)
+                furthest = 2;
+            furthest = 0;
+            vec3 u3d = sub(pointsR[(furthest + 1) % 3], pointsR[furthest]);
+            vec2 u = sub2(perspective2d(pointsR[(furthest + 1) % 3]), perspective2d(pointsR[furthest]));
+            //vec2 u = mul2(sub2(perspective2d(add(unit(u3d),pointsR[furthest])), perspective2d(pointsR[furthest])),length(u3d));
+            vec3 v3d = sub(pointsR[(furthest + 2) % 3], pointsR[furthest]);
+            vec2 v = sub2(perspective2d(pointsR[(furthest + 2) % 3]), perspective2d(pointsR[furthest]));
+            //vec2 v = mul2(sub2(perspective2d(add(unit(v3d),pointsR[furthest])), perspective2d(pointsR[furthest])),length(v3d));//sub2(mul2(perspective2d(unit(v3d)),length(v3d)), perspective2d(pointsR[furthest]));
+
+            float det = (u.x * v.y) - (v.x * u.y);
+            if(det == 0)
+                return;
+
+            printf("laddo %.5f %.5f %.5f %.5f %.5f \n",u.x, u.y, v.x, v.y, det);
+            textureTriangle(pointsOut[0], pointsOut[1], pointsOut[2], renderer, v.y / det, -v.x / det, -u.y / det, u.x / det, perspective2d(pointsR[furthest]), 0, textures[f.texture], f, u3d.y, v3d.y, pointsR[furthest].y);
+
         }
+        else
+        {
+            fillTriangle(pointsOut[0], pointsOut[1], pointsOut[2], renderer);
+            if(nPoints == 4)
+            {
+                fillTriangle(pointsOut[0], pointsOut[2], pointsOut[3], renderer);
+                if(DRAW_EDGES == 2)
+                    SDL_SetRenderDrawColor(renderer, 50,50,50,SDL_ALPHA_OPAQUE);
+                drawClippedLine(pointsOut[0], pointsOut[2], renderer);
+                //SDL_RenderDrawLine(renderer, pointsOut[0].x + (float)WIDTH/2, pointsOut[0].y + (float)HEIGHT/2, pointsOut[2].x + (float)WIDTH/2, pointsOut[2].y + (float)HEIGHT/2);
+            }
+        }
+
 
         if(DRAW_EDGES)
         {
@@ -778,6 +807,128 @@ void swapVec2Ptr(vec2 **p1, vec2 **p2)
     vec2 *hold = *p1;
     *p1 = *p2;
     *p2 = hold;
+}
+
+void textureTriangle(vec2 p1, vec2 p2, vec2 p3, SDL_Renderer *renderer, float mA, float mB, float mC, float mD, vec2 origin, int furthest, SDL_Surface *texture, face f, float uz, float vz, float oz)
+{
+    vec2 *top = &p1;
+    vec2 *mid = &p2;
+    vec2 *bot = &p3;
+
+    vec2 uvs[3] = {f.uv1, f.uv2, f.uv3};
+    vec2 tOrigin  = uvs[furthest];
+    vec2 tU = sub2(uvs[(furthest + 1) % 3], tOrigin);
+    vec2 tV = sub2(uvs[(furthest + 2) % 3], tOrigin);
+    printf("2 %.5f %.5f\n", tU.x, tU.y);
+    printf("2 %.5f %.5f\n", tV.x, tV.y);
+    //SDL_Delay(5000);
+    //sort by y value
+
+    if(top->y > bot->y)
+        swapVec2Ptr(&top,&bot);
+    if(top->y > mid->y)
+        swapVec2Ptr(&top,&mid);
+    if(mid->y > bot->y)
+        swapVec2Ptr(&mid,&bot);
+
+    vec2 mid2 = {.x = (bot->x - top->x) * (mid->y - top->y) / (bot->y - top->y) + top->x, .y = mid->y};
+    SDL_LockSurface(texture);
+    printf("nice\n");
+    if(mid->y != top->y) //draw flat bottom triangle
+    {
+        float starty = max(top->y, 0); //top
+        float endy = min(mid->y, HEIGHT); //bottom
+
+        float slope1 = (mid->x - top->x) / (mid->y - top->y);
+        float slope2 = (mid2.x - top->x) / (mid2.y - top->y);
+
+        float x1 = top->x + (slope1 * (starty - top->y));
+        float x2 = top->x + (slope2 * (starty - top->y));
+
+        float x;
+        float y;
+        int inc;
+        for(y = starty;y <= endy;y++)
+        {
+            //printf("1");
+            inc = (x1 < x2) ? 1 : -1;
+            if(!((x1 >= 0 || x2 >= 0) && (x1 <= WIDTH || x2 <= WIDTH)))
+                continue;
+            //    SDL_RenderDrawLine(renderer, clamp(min(x1,x2),0,WIDTH) - 1, y + 0.5f, clamp(max(x1,x2),0,WIDTH) + 1, y + 0.5f);
+            for(x = x1;(x2 - x)*inc >= 0;x += inc)
+            {
+                float vx = mA * (x - origin.x) + mB * (y - origin.y); //triangle leg coords
+                float vy = mC * (x - origin.x) + mD * (y - origin.y);
+                //printf("4  %.5f %.5f %.5f %.5f  ", mA, mB, mC, mD);
+                vec2 tPoint = add2(add2(mul2(tU, vx), mul2(tV, vy)), tOrigin);
+                //printf("%.5f %.5f %.5f %.5f\n", vx, vy, tPoint.x, tPoint.y);
+                Uint8 index = *((Uint8 *)texture->pixels + (int)(tPoint.y + 0.5f) * texture->pitch + (int)(tPoint.x + 0.5f) * texture->format->BytesPerPixel);
+                //printf("\n3");
+                //printf("%d\n", texture->format->BitsPerPixel);
+                //SDL_Delay(5000);
+
+                //printf("\n4");
+
+                //SDL_PixelFormat *fmt = texture->format;
+                //SDL_SetRenderDrawColor(renderer, index & fmt->Rmask >> fmt->Rshift << fmt->Rloss, index & fmt->Gmask >> fmt->Gshift << fmt->Gloss, index & fmt->Bmask >> fmt->Bshift << fmt->Bloss, index & fmt->Amask >> fmt->Ashift << fmt->Aloss);
+                SDL_Color *color = &(texture->format->palette->colors[index]);
+                SDL_SetRenderDrawColor(renderer, color->r, color->g, color->b, color->a);
+                SDL_RenderDrawPoint(renderer, x, y);
+                //SDL_RenderPresent(renderer);
+                //SDL_Delay(1);
+            }
+
+            x1 += slope1;
+            x2 += slope2;
+            //SDL_RenderPresent(renderer);
+        }
+    }
+    printf("meme");
+    if(mid->y != bot->y) //draw flat top triangle
+    {
+        float starty = max(mid->y, 0);
+        float endy = min(bot->y, HEIGHT);
+
+        float slope1 = (bot->x - mid->x) / (bot->y - mid->y);
+        float slope2 = (bot->x - mid2.x) / (bot->y - mid2.y);
+
+        float x1 = mid->x + (slope1 * (starty - mid->y));
+        float x2 = mid2.x + (slope2 * (starty - mid->y));
+
+        float x;
+        float y;
+        int inc;
+        for(y = starty;y <= endy;y++)
+        {
+            inc = (x1 < x2) ? 1 : -1;
+            //if((x1 >= 0 || x2 >= 0) && (x1 <= WIDTH || x2 <= WIDTH))
+            //    SDL_RenderDrawLine(renderer, clamp(min(x1,x2),0,WIDTH) - 1, y + 0.5f, clamp(max(x1,x2),0,WIDTH) + 1, y + 0.5f);
+            if(!((x1 >= 0 || x2 >= 0) && (x1 <= WIDTH || x2 <= WIDTH)))
+                continue;
+            for(x = x1;(x2 - x)*inc >= 0;x += inc)
+            {
+                float vx = mA * (x - origin.x) + mB * (y - origin.y); //triangle leg coords
+                float vy = mC * (x - origin.x) + mD * (y - origin.y);
+
+                vec2 tPoint = add2(add2(mul2(tU, vx), mul2(tV, vy)), tOrigin);
+                Uint8 index = *((Uint8 *)texture->pixels + (int)(tPoint.y + 0.5f) * texture->pitch + (int)(tPoint.x + 0.5f) * texture->format->BytesPerPixel);
+                SDL_Color *color = &texture->format->palette->colors[index];
+                SDL_SetRenderDrawColor(renderer, color->r, color->g, color->b, color->a);
+                SDL_RenderDrawPoint(renderer, x, y);
+            }
+
+            x1 += slope1;
+            x2 += slope2;
+        }
+    }
+    SDL_UnlockSurface(texture);
+    //SDL_RenderDrawLine(renderer, mid->x, mid->y, mid2.x, mid2.y);
+    //SDL_RenderDrawLine(renderer, top->x , top->y + 0.5f, mid->x, mid->y + 0.5f);
+    //SDL_RenderDrawLine(renderer, top->x, top->y + 0.5f, bot->x, bot->y + 0.5f);
+    //SDL_RenderDrawLine(renderer, bot->x, bot->y + 0.5f, mid->x, mid->y + 0.5f);
+    //drawClippedLine(p1, p2, renderer);
+    //drawClippedLine(p1, p3, renderer);
+    //drawClippedLine(p3, p2, renderer);
 }
 
 void fillTriangle(vec2 p1, vec2 p2, vec2 p3, SDL_Renderer *renderer)
@@ -1215,6 +1366,7 @@ vec3 toVec3(vec2 a, float z)
 
 vec2 perspective2d(vec3 a)
 {
+
     vec2 r = {.x = a.x * FRUSTUM_WIDTH * ((float)WIDTH/2.0) / a.y + (float)WIDTH/2.0, .y = a.z * FRUSTUM_WIDTH * ((float)WIDTH/2.0) / a.y + (float)HEIGHT/2.0};
     return r;
 }

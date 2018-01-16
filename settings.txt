@@ -1,7 +1,7 @@
 map = pillarRoom.txt
-width = 1920
-height = 1080
+width = 900
+height = 500
 sensitivity = 1.1
 frustum width = 0.7
-frustum near length = 0.01
-draw edges = 0
+frustum near length = 0.1
+draw edges = 2

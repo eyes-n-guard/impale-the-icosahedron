@@ -334,3 +334,11 @@
 	<math.h>
 	<time.h>
 
+1516083376 source:c:\users\area 51\documents\github\impale the icosahedron\main.c
+	<stdio.h>
+	<stdlib.h>
+	<stdbool.h>
+	<SDL.h>
+	<math.h>
+	<time.h>
+
